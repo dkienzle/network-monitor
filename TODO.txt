@@ -1,0 +1,13 @@
+
+The plan is to create a series of tools that can work together and share state.  At this point I am not
+sure if it would make more sense to create a series of separate tools that share state via an in-memory
+store (e.g. redis) or a single executable that keeps state in memory.  I can see advantages to both.
+
+There are a ton of little things I need to do before any of this is presentable:
+
+1. Clean up the code
+2. Refactor so the common code is in a single place
+3. Figure out the right filter(s) to grab all the data I need in a single (reasonable) stream
+4. Get this working on Windows and Linux (incl the Raspberry Pi)
+5. Preserve listener state across sessions.  Allow annotations to be added to devices and saved.
+6. Add tcpdump-like command line argument parsing
