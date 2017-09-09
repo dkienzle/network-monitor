@@ -14,19 +14,24 @@ pcap_kafka -- a proof of concept tcpdump -> kafka tool
 
 Other tools will be added later and these will be refined to work together.  
 
-Quick Start:
+##Quick Start:
 - install a recent version of Go (from www.golang.org).
 
 - Once Go is installed you need to retrieve the gopacket and kafka libraries
-   go get github.com/google/gopacket
-   go get github.com/confluentinc/confluent-kafka-go/kafka
+
+  go get github.com/google/gopacket
+
+  go get github.com/confluentinc/confluent-kafka-go/kafka
 
 - On a Mac you can eliminate the need to run using sudo by giving your account privilege to read the pcap device(s)
-   sudo chgrp staff /dev/bpf*
-   sudo chmod g+r /dev/bpf*
+
+  sudo chgrp staff /dev/bpf*
+
+  sudo chmod g+r /dev/bpf*
 
 - build and run the listener against the default interface
-   [sudo] go run listen/listener.go
+
+  [sudo] go run listen/listener.go
 
 This will run and dump info about packets until you hit Ctrl-C.
 
@@ -34,8 +39,10 @@ In the current incarnation, running against the live interface will not show you
 capture broadcast traffic into a pcap file and then replay it aginst the listener in offline mode.  This will also work on linux
 (which uses a different device name than the hardcoded Mac default) and will allow you to avoid running my code as root.
 
- sudo tcpdump -w capturefile.pcap -i en0 -s0 ether multicast
+  sudo tcpdump -w capturefile.pcap -i en0 -s0 ether multicast
+
     On linux, use eth0 (for wired) or wlan0 (for wireless) instead of en0
- go run listen/listener.go capturefile.pcap
+
+  go run listen/listener.go capturefile.pcap
  
 
