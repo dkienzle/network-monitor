@@ -29,6 +29,8 @@ Other tools will be added later and these will be refined to work together.
 
   sudo chmod g+r /dev/bpf*
 
+(This will be reverted any time you reboot the Mac)
+
 - build and run the listener against the default interface
 
   [sudo] go run listen/listener.go
@@ -45,4 +47,3 @@ capture broadcast traffic into a pcap file and then replay it aginst the listene
 
   go run listen/listener.go capturefile.pcap
  
-
