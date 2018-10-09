@@ -29,7 +29,7 @@ Other tools will be added later and these will be refined to work together.
 
   sudo chmod g+r /dev/bpf*
 
-(This will be reverted any time you reboot the Mac)
+(This will be reverted any time you reboot the Mac.)
 
 - build and run the listener against the default interface
 
