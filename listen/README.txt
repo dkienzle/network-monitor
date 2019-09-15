@@ -10,7 +10,8 @@ If you want to capture traffic into a pcap file and then replay it, use tcpdump.
 On linux, use eth0 (for wired) or wlan0 (for wireless) instead of en0
 
 Once you have a capture file, invoke the listener with:
-   go run listener.go capturefile.pcap
+   go build listen.go device.go
+   ./listen capturefile.pcap
 
 The listener takes a while to build because the gopacket library initializes static variables with the complete MAC->manufacturer listings.
 This is extremely useful but does bloat the code and build time.
