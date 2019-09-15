@@ -1,7 +1,4 @@
-These are network monitoring tools written in Go.
-
-My main goal was to learn Go and figure out whether it was the right tool for this job.  So far I've been pretty pleased 
-with Go.
+These are network monitoring tools written in Go (as a learning exercise -- I don't claim to be a Go expert).
 
 The tools here are _VERY_ rough.  I still need to refactor the code, and I'm still exploring the problem space.  But 
 I wanted to get them posted here so I could start collecting feedback.
@@ -17,24 +14,36 @@ pcap_kafka -- a proof of concept tcpdump -> kafka tool
 
 Other tools will be added later and these will be refined to work together.  
 
+##Quick Start:
+- install a recent version of Go (from www.golang.org).
 
-To build the tools, you need to install a recent version of Go (from www.golang.org).
+- Once Go is installed you need to retrieve the gopacket and kafka libraries
 
-Once Go is installed you need to retrieve the gopacket and kafka libraries
-   go get github.com/google/gopacket
-        go get github.com/confluentinc/confluent-kafka-go/kafka
+  go get github.com/google/gopacket
 
-If you want to capture traffic into a pcap file and then replay it, use tcpdump.  On the Mac the capture command looks like 
-this:
-   sudo tcpdump -w capturefile.pcap -i en0 -s0 ether multicast
+  go get github.com/confluentinc/confluent-kafka-go/kafka
 
-This says to (w)rite a file called capturefile.pcap, recording from the en0 network (i)nterface, with a (s)naplength of 0
-(capture the whole packet) and limit the capture to packets with the first bit = 1 (the ethernet broadcast bit)
+- On a Mac you can eliminate the need to run using sudo by giving your account privilege to read the pcap device(s)
 
-On linux, use eth0 (for wired) or wlan0 (for wireless) instead of en0
+  sudo chgrp staff /dev/bpf*
 
-On the Mac, I recommend changing the permissions on the bpf devices to allow your programs to monitor traffic without 
-requiring sudo:
-   sudo chgrp staff /dev/bpf*
-   sudo chmod g+r /dev/bpf*
-There is a startup item that ships with wireshark that will set these permissions each time the machine boots
+  sudo chmod g+r /dev/bpf*
+
+(This will be reverted any time you reboot the Mac.)
+
+- build and run the listener against the default interface
+
+  [sudo] go run listen/listener.go
+
+This will run and dump info about packets until you hit Ctrl-C.
+
+In the current incarnation, running against the live interface will not show you the device summary.  For that, you need to
+capture broadcast traffic into a pcap file and then replay it aginst the listener in offline mode.  This will also work on linux
+(which uses a different device name than the hardcoded Mac default) and will allow you to avoid running my code as root.
+
+  sudo tcpdump -w capturefile.pcap -i en0 -s0 ether multicast
+
+    On linux, use eth0 (for wired) or wlan0 (for wireless) instead of en0
+
+  go run listen/listener.go capturefile.pcap
+ 
