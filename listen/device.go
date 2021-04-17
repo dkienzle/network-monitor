@@ -18,6 +18,10 @@ type PortSet map[int]bool
 
 type MAC [6]byte
 
+func (m MAC) toString() string {
+	return fmt.Sprintf("%02X:%02X:%02X:%02X:%02X:%02X", m[0], m[1], m[2], m[3], m[4], m[5])
+}
+
 func (p PortSet) String() string {
 	var retval bytes.Buffer
 	delim := ""
@@ -77,6 +81,12 @@ func (d *Device) bump() {
 }
 
 func (devices DeviceList) writeSummary() {
+	//TODO -- change this to print the deltas that we observed in the last tick.
+	//new devices, number of packets, any other interesting "facts"
+	fmt.Printf("Monitoring %d devices\n", len(devices))
+}
+
+func (devices DeviceList) writeDetail() {
 
 	// Go randomizes the iterator order for a map on purpose.  So to get them into a consistent order,
 	// we need to sort first.  For now sort by MAC address since that's easiest, since they are constant
@@ -95,7 +105,7 @@ func (devices DeviceList) writeSummary() {
 	fmt.Println()
 	for _, d := range sorted {
 		fmt.Println()
-		fmt.Printf("%20s %20s %20s %30s %30s %8d %t\n", d.mac, d.clientID, d.IPv4, d.IPv6, d.manufacturer, d.packets, d.snap)
+		fmt.Printf("%8d %20s %20s %20s %-30s %30s %t\n", d.packets, d.mac.toString(), d.clientID, d.IPv4, d.manufacturer, d.IPv6, d.snap)
 		fmt.Println("\tUDP Ports:", d.ports)
 		for n, c := range d.NBNames {
 			fmt.Printf("\tNetBIOS (%d) = %s\n", c, n)
@@ -120,8 +130,8 @@ func (devices DeviceList) writeSummary() {
 }
 
 func getOrgName(snapCode []byte) string {
-	if len(snapCode) >= 3 {
-		return "Bad SNAP org prefix"
+	if len(snapCode) < 3 {
+		return "invalid"
 	}
 	var prefix [3]byte
 	copy(prefix[:], snapCode[0:3])
@@ -130,7 +140,7 @@ func getOrgName(snapCode []byte) string {
 	if ok {
 		return name
 	}
-	return "SNAP org not found"
+	return "unknown"
 }
 
 func makeMAC(hwaddr net.HardwareAddr) (MAC, error) {
@@ -172,10 +182,12 @@ func (devices DeviceList) getDevice(hwaddr net.HardwareAddr) (*Device, error) {
 		return device, nil
 	}
 
-	return NewDevice(mac), nil
+	d := NewDevice(mac)
+	devices[mac] = d
+	return d, nil
 }
 
-func (devices *DeviceList) recordPacketInfo(packet gopacket.Packet) {
+func (devices *DeviceList) recordPacketInfo(packet gopacket.Packet, verbose bool) {
 	// Let's see if the packet is an ethernet packet
 	ethernetLayer := packet.Layer(layers.LayerTypeEthernet)
 
@@ -197,7 +209,7 @@ func (devices *DeviceList) recordPacketInfo(packet gopacket.Packet) {
 	switch ethernetPacket.EthernetType {
 
 	case layers.EthernetTypeLLC:
-		dumpLLC(d, packet, srcMAC, dstMAC)
+		dumpLLC(d, packet, srcMAC, dstMAC, verbose)
 
 	case layers.EthernetTypeIPv4:
 		//		fmt.Println("Found an IPv4")
@@ -229,12 +241,16 @@ func (devices *DeviceList) recordPacketInfo(packet gopacket.Packet) {
 
 	case 0x8874:
 		// loop detection.  for now just eat it because we don't believe the source MAC anyway.
-		fmt.Printf("Loop Detection protocol 0x8874")
-		Hexdump(packet.Data())
+		fmt.Printf("Loop Detection protocol 0x8874\n")
+		if verbose {
+			Hexdump(packet.Data())
+		}
 
 	default:
 		fmt.Printf("UNKNOWN %x PACKET FROM %s to %s\n", ethernetPacket.EthernetType, srcMAC, dstMAC)
-		Hexdump(packet.Data())
+		if verbose {
+			Hexdump(packet.Data())
+		}
 	}
 
 }
@@ -316,13 +332,15 @@ func dumpBonjour(d *Device, packet gopacket.Packet) bool {
 	return true
 }
 
-func dumpLLC(d *Device, packet gopacket.Packet, srcMAC, dstMAC string) {
+func dumpLLC(d *Device, packet gopacket.Packet, srcMAC, dstMAC string, verbose bool) {
 	llcLayer := packet.Layer(layers.LayerTypeLLC)
 	llc, ok := llcLayer.(*layers.LLC)
 
 	if !ok {
 		fmt.Println("Unable to decode LLC packet")
-		Hexdump(packet.Data())
+		if verbose {
+			Hexdump(packet.Data())
+		}
 		return
 	}
 

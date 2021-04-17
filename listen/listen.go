@@ -4,6 +4,9 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/google/gopacket"
@@ -57,7 +60,7 @@ func fileMain(filename string) {
 
 	for packet := range packetSource.Packets() {
 		// Process packet here
-		devices.recordPacketInfo(packet)
+		devices.recordPacketInfo(packet, false)
 	}
 
 	devices.writeSummary()
@@ -75,7 +78,7 @@ func liveMain(iface string) {
 		log.Fatal(err)
 	}
 
-	defer handle.Close()
+	//defer handle.Close() //TODO change to drain and close.
 
 	// Set filter
 	var filter string = "ether multicast"
@@ -92,10 +95,30 @@ func liveMain(iface string) {
 
 	devices := make(DeviceList) //make(map[string]*Device)
 
-	for packet := range packetSource.Packets() {
-		// Process packet here
-		devices.recordPacketInfo(packet)
+	verbose := false //TODO make this an argument, maybe move to Context?
+
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	signals := make(chan os.Signal, 1)
+	defer close(signals)
+	signal.Notify(signals, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+
+	for {
+		select {
+		case <-ticker.C:
+			log.Println("TICK!")
+			devices.writeSummary()
+
+		case <-signals:
+			log.Println("Got a signal")
+			devices.writeDetail()
+			return
+
+		case packet := <-packetSource.Packets():
+			devices.recordPacketInfo(packet, verbose)
+
+		}
 	}
 
-	devices.writeSummary()
 }
