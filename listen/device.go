@@ -16,11 +16,13 @@ import (
 
 type PortSet map[int]bool
 
+type MAC [6]byte
+
 func (p PortSet) String() string {
 	var retval bytes.Buffer
 	delim := ""
 
-	for port, _ := range p {
+	for port := range p {
 		retval.WriteString(delim)
 		retval.WriteString(strconv.Itoa(port))
 		delim = ","
@@ -29,7 +31,7 @@ func (p PortSet) String() string {
 }
 
 type Device struct {
-	MAC          string
+	mac          MAC
 	manufacturer string
 	IPv4         net.IP
 	clientID     string
@@ -47,7 +49,7 @@ type Device struct {
 	// need some sort of activity total.... possibly with decay
 }
 
-type DeviceList map[string]*Device
+type DeviceList map[MAC]*Device
 
 // every function named init() is called at load time to initialize globals
 
@@ -55,7 +57,7 @@ type ByMAC []*Device
 
 func (a ByMAC) Len() int           { return len(a) }
 func (a ByMAC) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-func (a ByMAC) Less(i, j int) bool { return a[i].MAC < a[j].MAC }
+func (a ByMAC) Less(i, j int) bool { return string(a[i].mac[:]) < string(a[j].mac[:]) }
 
 type ByIP []*Device
 
@@ -93,23 +95,23 @@ func (devices DeviceList) writeSummary() {
 	fmt.Println()
 	for _, d := range sorted {
 		fmt.Println()
-		fmt.Printf("%20s %20s %20s %30s %30s %8d %t\n", d.MAC, d.clientID, d.IPv4, d.IPv6, d.manufacturer, d.packets, d.snap)
+		fmt.Printf("%20s %20s %20s %30s %30s %8d %t\n", d.mac, d.clientID, d.IPv4, d.IPv6, d.manufacturer, d.packets, d.snap)
 		fmt.Println("\tUDP Ports:", d.ports)
 		for n, c := range d.NBNames {
 			fmt.Printf("\tNetBIOS (%d) = %s\n", c, n)
 		}
-		for n, _ := range d.bonjourQ {
+		for n := range d.bonjourQ {
 			fmt.Println("\tQ:", n)
 		}
-		for n, _ := range d.bonjourA {
+		for n := range d.bonjourA {
 			fmt.Println("\tA:", n)
 			//Hexdump(x)
 		}
-		for n, _ := range d.bonjourB {
+		for n := range d.bonjourB {
 			fmt.Println("\tB:", n)
 			//Hexdump(x)
 		}
-		for n, _ := range d.bonjourC {
+		for n := range d.bonjourC {
 			fmt.Println("\tC:", n)
 			//Hexdump(x)
 		}
@@ -117,36 +119,60 @@ func (devices DeviceList) writeSummary() {
 
 }
 
-func getOrgName(mac []byte) string {
+func getOrgName(snapCode []byte) string {
+	if len(snapCode) >= 3 {
+		return "Bad SNAP org prefix"
+	}
 	var prefix [3]byte
-	prefix[0] = mac[0]
-	prefix[1] = mac[1]
-	prefix[2] = mac[2]
+	copy(prefix[:], snapCode[0:3])
 
-	return macs.ValidMACPrefixMap[prefix]
+	name, ok := macs.ValidMACPrefixMap[prefix]
+	if ok {
+		return name
+	}
+	return "SNAP org not found"
+}
+
+func makeMAC(hwaddr net.HardwareAddr) (MAC, error) {
+	var mac MAC
+	if len(hwaddr) != 6 {
+		return mac, fmt.Errorf("invalid hardware address %v", hwaddr)
+	}
+
+	copy(mac[:], hwaddr[0:6])
+	return mac, nil
+}
+
+func NewDevice(mac MAC) *Device {
+
+	device := Device{}
+	device.NBNames = make(map[string]int)
+	device.ports = make(map[int]bool)
+	device.bonjourQ = make(map[string]bool)
+	device.bonjourA = make(map[string][]byte)
+	device.bonjourB = make(map[string][]byte)
+	device.bonjourC = make(map[string][]byte)
+	device.mac = mac
+
+	device.manufacturer = getOrgName(mac[:])
+	return &device
 }
 
 // Retrieve the device record for this MAC address.
 // If this is the first time we have seen this MAC,
 // create a new record and _initialize_ the fields!
-func (devices DeviceList) getDevice(mac net.HardwareAddr) *Device {
-	d, ok := devices[string(mac)]
-	if ok {
-		return d
+func (devices DeviceList) getDevice(hwaddr net.HardwareAddr) (*Device, error) {
+	mac, err := makeMAC(hwaddr)
+	if err != nil {
+		return nil, err //TODO: wrap the error
 	}
 
-	var newDevice Device
-	newDevice.NBNames = make(map[string]int)
-	newDevice.ports = make(map[int]bool)
-	newDevice.bonjourQ = make(map[string]bool)
-	newDevice.bonjourA = make(map[string][]byte)
-	newDevice.bonjourB = make(map[string][]byte)
-	newDevice.bonjourC = make(map[string][]byte)
-	newDevice.MAC = mac.String()
+	device, ok := devices[mac]
+	if ok {
+		return device, nil
+	}
 
-	newDevice.manufacturer = getOrgName(mac)
-	devices[string(mac)] = &newDevice
-	return &newDevice
+	return NewDevice(mac), nil
 }
 
 func (devices *DeviceList) recordPacketInfo(packet gopacket.Packet) {
@@ -161,7 +187,7 @@ func (devices *DeviceList) recordPacketInfo(packet gopacket.Packet) {
 	ethernetPacket, _ := ethernetLayer.(*layers.Ethernet)
 
 	srcMAC := ethernetPacket.SrcMAC.String()
-	d := devices.getDevice(ethernetPacket.SrcMAC)
+	d, _ := devices.getDevice(ethernetPacket.SrcMAC) //TODO -- probably should log a bad MAC
 	d.bump()
 
 	dstMAC := ethernetPacket.DstMAC.String()
@@ -201,12 +227,16 @@ func (devices *DeviceList) recordPacketInfo(packet gopacket.Packet) {
 	case 0x0842:
 		dumpWOMP(d, srcMAC, packet)
 
+	case 0x8874:
+		// loop detection.  for now just eat it because we don't believe the source MAC anyway.
+		fmt.Printf("Loop Detection protocol 0x8874")
+		Hexdump(packet.Data())
+
 	default:
-		fmt.Printf("UNKNOWN PACKET FROM %s to %s\n", srcMAC, dstMAC)
+		fmt.Printf("UNKNOWN %x PACKET FROM %s to %s\n", ethernetPacket.EthernetType, srcMAC, dstMAC)
 		Hexdump(packet.Data())
 	}
 
-	return
 }
 
 func dumpWOMP(d *Device, srcMAC string, packet gopacket.Packet) {
