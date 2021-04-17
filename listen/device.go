@@ -80,10 +80,10 @@ func (d *Device) bump() {
 	d.packets++
 }
 
-func (devices DeviceList) writeSummary() {
+func (devices DeviceList) shortSummary() string {
 	//TODO -- change this to print the deltas that we observed in the last tick.
 	//new devices, number of packets, any other interesting "facts"
-	fmt.Printf("Monitoring %d devices\n", len(devices))
+	return fmt.Sprintf("Monitoring %d devices", len(devices))
 }
 
 func (devices DeviceList) writeDetail() {

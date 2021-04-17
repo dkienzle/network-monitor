@@ -63,15 +63,15 @@ func fileMain(filename string) {
 		devices.recordPacketInfo(packet, false)
 	}
 
-	devices.writeSummary()
+	devices.writeDetail()
 
 }
 
 func liveMain(iface string) {
 
 	snapshotLen := int32(1500)
-	promiscuous := false
-	timeout := 30 * time.Second
+	promiscuous := true
+	timeout := 1 * time.Second
 
 	handle, err := pcap.OpenLive(iface, snapshotLen, promiscuous, timeout)
 	if err != nil {
@@ -94,6 +94,7 @@ func liveMain(iface string) {
 	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
 
 	devices := make(DeviceList) //make(map[string]*Device)
+	histo := NewHistogram()
 
 	verbose := false //TODO make this an argument, maybe move to Context?
 
@@ -107,17 +108,17 @@ func liveMain(iface string) {
 	for {
 		select {
 		case <-ticker.C:
-			log.Println("TICK!")
-			devices.writeSummary()
+			log.Println("TICK!", devices.shortSummary(), histo.shortSummary())
 
 		case <-signals:
 			log.Println("Got a signal")
 			devices.writeDetail()
+			//histo.writeDetail()
 			return
 
 		case packet := <-packetSource.Packets():
 			devices.recordPacketInfo(packet, verbose)
-
+			histo.tally(packet.Data())
 		}
 	}
 
